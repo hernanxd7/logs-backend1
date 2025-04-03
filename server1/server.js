@@ -28,10 +28,11 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Modificar la configuración CORS para aceptar cualquier origen durante desarrollo
+// Modificar la configuración CORS para aceptar cualquier origen
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
-  credentials: true
-}))
+    origin: '*',
+    credentials: true
+  }))
 
 const logger = winston.createLogger({
     level: 'info',
