@@ -92,21 +92,7 @@ app.use((req, res, next) => {
 
 app.use('/api', routes)
 
-// Ruta para obtener información
-// Eliminar esta primera ruta getInfo que está duplicada
-// app.get('/getInfo', verifyToken, (req, res) => {
-//     res.json({
-//         nodeVersion: process.version,
-//         alumno: {
-//             nombre: 'Tu Nombre',
-//             grupo: 'Tu Grupo'
-//         },
-//         docente: {
-//             nombre: 'Nombre del Docente',
-//             grupo: 'Grupo del Docente'
-//         }
-//     });
-// });
+
 
 // Ruta para registro con MFA
 app.post('/register', async (req, res) => {
@@ -550,6 +536,100 @@ app.get('/getInfo', verifyToken, async (req, res) => {
     }
 });
 
+// Endpoint para obtener estadísticas de métodos HTTP
+app.get('/logs/methods', verifyToken, async (req, res) => {
+  try {
+    console.log('Obteniendo estadísticas de métodos HTTP...');
+    
+    // Inicializar estadísticas por defecto
+    const methodStats = {
+      GET: 0,
+      POST: 0,
+      PUT: 0,
+      DELETE: 0,
+      OTHER: 0
+    };
+    
+    // Obtener logs de las últimas 24 horas
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    try {
+      const logsSnapshot = await db.collection('logs')
+        .where('timestamp', '>=', oneDayAgo)
+        .get();
+      
+      console.log(`Encontrados ${logsSnapshot.size} logs para analizar`);
+      
+      // Contar los métodos de las peticiones en los logs
+      logsSnapshot.forEach(doc => {
+        const logData = doc.data();
+        
+        // Extraer el método HTTP de diferentes ubicaciones posibles en la estructura
+        let method = null;
+        
+        // Caso 1: El método está directamente en el campo 'method'
+        if (logData.method) {
+          method = logData.method.toUpperCase();
+        } 
+        // Caso 2: El método está en meta.req.method (como se ve en los logs)
+        else if (logData.meta && logData.meta.req && logData.meta.req.method) {
+          method = logData.meta.req.method.toUpperCase();
+        }
+        // Caso 3: El método está en el mensaje (como "GET /logs")
+        else if (logData.message && typeof logData.message === 'string') {
+          const methodMatch = logData.message.match(/^(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+/i);
+          if (methodMatch) {
+            method = methodMatch[1].toUpperCase();
+          }
+        }
+        
+        // Incrementar el contador correspondiente
+        if (method) {
+          if (methodStats[method] !== undefined) {
+            methodStats[method]++;
+          } else {
+            methodStats.OTHER++;
+          }
+        }
+      });
+      
+      res.json(methodStats);
+    } catch (dbError) {
+      console.error('Error al consultar Firestore:', dbError);
+      res.json(methodStats); // Devolver estadísticas vacías en caso de error
+    }
+  } catch (error) {
+    console.error('Error al obtener estadísticas de métodos:', error);
+    res.status(500).json({ 
+      message: 'Error al obtener estadísticas de métodos',
+      error: error.message 
+    });
+  }
+});
+
+// 3. Verificación de la estructura de datos:
+
+// Endpoint de diagnóstico para ver la estructura de los logs
+app.get('/logs/debug', verifyToken, async (req, res) => {
+  try {
+    const logsSnapshot = await db.collection('logs')
+      .limit(5)
+      .get();
+    
+    const sampleLogs = [];
+    logsSnapshot.forEach(doc => {
+      sampleLogs.push(doc.data());
+    });
+    
+    res.json({ sampleLogs });
+  } catch (error) {
+    console.error('Error al obtener logs de muestra:', error);
+    res.status(500).json({ message: 'Error al obtener logs de muestra' });
+  }
+});
+
+// Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`Servidor 1 (con Rate Limit) ejecutándose en http://localhost:${PORT}`)
-})
+  console.log(`Servidor 1 (sin Rate Limit) ejecutándose en http://localhost:${PORT}`);
+});
